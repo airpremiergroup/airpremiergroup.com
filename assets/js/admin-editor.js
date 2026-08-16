@@ -1,13 +1,24 @@
 /**
  * AIR PREMIER GROUP - Panel de Edición en Vivo y Autenticación de Cliente
- * Permite editar textos directamente en la web y guardar en Neon.tech
+ * Permite editar textos y cambiar imágenes por DOBLE CLIC en tiempo real y guardar en Neon.tech
  */
 
 (function () {
     let isEditing = false;
     let authToken = sessionStorage.getItem('apg_admin_token') || null;
+    let targetImageForUpload = null;
 
-    // Inyectar Estilos del Editor y Modal
+    // Crear input file oculto para cargar imágenes
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    fileInput.id = 'apg-hidden-file-input';
+    document.body.appendChild(fileInput);
+
+    fileInput.addEventListener('change', handleFileSelected);
+
+    // Inyectar Estilos del Editor, Modal e Imágenes
     const style = document.createElement('style');
     style.textContent = `
         /* Barra de Herramientas de Edición */
@@ -120,8 +131,8 @@
             transform: scale(1.03);
         }
 
-        /* Resaltado de Elementos Editables */
-        body.apg-editing-active [data-content-key] {
+        /* Resaltado de Textos Editables */
+        body.apg-editing-active [data-content-key]:not(img) {
             outline: 2px dashed #38bdf8 !important;
             outline-offset: 4px;
             background-color: rgba(56, 189, 248, 0.1) !important;
@@ -129,8 +140,21 @@
             cursor: text !important;
             transition: background-color 0.2s ease;
         }
-        body.apg-editing-active [data-content-key]:hover {
+        body.apg-editing-active [data-content-key]:not(img):hover {
             background-color: rgba(56, 189, 248, 0.2) !important;
+        }
+
+        /* Resaltado de Imágenes Editables */
+        body.apg-editing-active img[data-content-key] {
+            outline: 3px dashed #f59e0b !important;
+            outline-offset: 3px;
+            cursor: pointer !important;
+            position: relative;
+            transition: filter 0.2s, transform 0.2s;
+        }
+        body.apg-editing-active img[data-content-key]:hover {
+            filter: brightness(1.15) drop-shadow(0 0 10px rgba(245, 158, 11, 0.6));
+            transform: scale(1.01);
         }
 
         /* Modal de Login */
@@ -287,7 +311,7 @@
         modal.innerHTML = `
             <div class="apg-modal-card">
                 <h3><i class="fa-solid fa-user-shield" style="color: #38bdf8;"></i> Modo Administrador</h3>
-                <p>Ingrese su contraseña de gestión para habilitar la edición de contenidos en vivo.</p>
+                <p>Ingrese su contraseña de gestión para habilitar la edición de contenidos e imágenes en vivo.</p>
                 <form id="apg-login-form">
                     <div class="apg-form-group">
                         <input type="password" id="apg-admin-pass" class="apg-input" placeholder="Contraseña de Administrador" required autofocus />
@@ -334,7 +358,6 @@
     function renderAdminToolbar() {
         if (document.getElementById('apg-admin-toolbar')) return;
 
-        // Ajustar padding en header si existe
         const header = document.querySelector('header');
         if (header) {
             header.style.top = '54px';
@@ -345,7 +368,7 @@
         toolbar.innerHTML = `
             <div class="toolbar-info">
                 <span class="badge">ADMIN</span>
-                <span>Editor de Contenido en Vivo</span>
+                <span>Editor en Vivo (Textos &amp; Fotos)</span>
             </div>
             <div class="apg-tb-btn-group">
                 <button class="apg-btn apg-btn-toggle" id="apg-toggle-edit-btn">
@@ -370,23 +393,88 @@
     function toggleEditMode() {
         isEditing = !isEditing;
         const btn = document.getElementById('apg-toggle-edit-btn');
-        const editables = document.querySelectorAll('[data-content-key]');
+        const editableTexts = document.querySelectorAll('[data-content-key]:not(img)');
+        const editableImgs = document.querySelectorAll('img[data-content-key]');
 
         if (isEditing) {
             document.body.classList.add('apg-editing-active');
             btn.classList.add('active');
-            btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Edición ACTIVA (Haz clic en cualquier texto)';
-            editables.forEach(el => el.setAttribute('contenteditable', 'true'));
-            showToast('Haz clic sobre cualquier texto para modificarlo');
+            btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Edición ACTIVA (Clic textos / Doble clic fotos)';
+            
+            // Habilitar textos
+            editableTexts.forEach(el => el.setAttribute('contenteditable', 'true'));
+
+            // Habilitar doble clic en imágenes
+            editableImgs.forEach(img => {
+                img.title = 'Haz doble clic para cambiar esta imagen';
+                img.addEventListener('dblclick', onImageDblClick);
+            });
+
+            showToast('Haz clic en cualquier texto o DOBLE CLIC en cualquier imagen para modificarla');
         } else {
             document.body.classList.remove('apg-editing-active');
             btn.classList.remove('active');
             btn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Activar Edición';
-            editables.forEach(el => el.removeAttribute('contenteditable'));
+            
+            editableTexts.forEach(el => el.removeAttribute('contenteditable'));
+            editableImgs.forEach(img => {
+                img.removeAttribute('title');
+                img.removeEventListener('dblclick', onImageDblClick);
+            });
         }
     }
 
-    // Guardar cambios en Neon.tech vía Vercel API
+    // Manejador de doble clic en imágenes
+    function onImageDblClick(e) {
+        if (!isEditing) return;
+        e.preventDefault();
+        e.stopPropagation();
+        targetImageForUpload = e.currentTarget;
+        fileInput.value = ''; // Reset
+        fileInput.click();
+    }
+
+    // Procesar archivo de imagen seleccionado y optimizar
+    function handleFileSelected(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file || !targetImageForUpload) return;
+
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            const img = new Image();
+            img.onload = function () {
+                // Redimensionar suavemente si supera 1600px para mantener rendimiento ultra rápido
+                const maxDim = 1600;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxDim || height > maxDim) {
+                    if (width > height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const optimizedDataUrl = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.85);
+                
+                targetImageForUpload.src = optimizedDataUrl;
+                showToast('¡Imagen actualizada en pantalla! Recuerda presionar "Guardar en Neon.tech"');
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Guardar cambios (textos e imágenes) en Neon.tech vía Vercel API
     async function saveChangesToNeon() {
         if (isEditing) toggleEditMode();
 
@@ -395,13 +483,18 @@
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Guardando...';
 
-        const editables = document.querySelectorAll('[data-content-key]');
+        const allElements = document.querySelectorAll('[data-content-key]');
         const items = {};
 
-        editables.forEach(el => {
+        allElements.forEach(el => {
             const key = el.getAttribute('data-content-key');
             if (key) {
-                items[key] = el.innerHTML.trim();
+                if (el.tagName === 'IMG') {
+                    // Solo guardamos si se modificó o tiene ruta
+                    items[key] = el.getAttribute('src');
+                } else {
+                    items[key] = el.innerHTML.trim();
+                }
             }
         });
 

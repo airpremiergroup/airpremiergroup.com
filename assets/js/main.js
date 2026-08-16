@@ -1,10 +1,10 @@
 /**
  * AIR PREMIER GROUP - Frontend Scripts
- * Carga de contenido dinámico desde Neon.tech y comportamientos generales
+ * Carga de contenido dinámico (textos e imágenes) desde Neon.tech y comportamientos generales
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. Cargar contenidos actualizados desde Neon.tech
+    // 1. Cargar contenidos e imágenes actualizados desde Neon.tech
     try {
         const response = await fetch('/api/content');
         if (response.ok) {
@@ -12,8 +12,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (result.data && Object.keys(result.data).length > 0) {
                 Object.entries(result.data).forEach(([key, content]) => {
                     const el = document.querySelector(`[data-content-key="${key}"]`);
-                    if (el) {
-                        el.innerHTML = content;
+                    if (el && content) {
+                        if (el.tagName === 'IMG') {
+                            el.src = content;
+                        } else {
+                            el.innerHTML = content;
+                        }
                     }
                 });
                 console.log('✅ Contenido sincronizado desde Neon.tech');
