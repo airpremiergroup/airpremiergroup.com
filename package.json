@@ -4,6 +4,7 @@
   "description": "AIR PREMIER GROUP - Portal Oficial con Editor CMS y Neon.tech",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "resend": "^6.20.0"
   }
 }
