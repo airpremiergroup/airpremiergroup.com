@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     const resend = new Resend(apiKey);
     
     // Destinatarios: Se pueden configurar varios separados por coma en Vercel
-    const toEmailRaw = process.env.CONTACT_RECEIVER_EMAIL || 'airpremiergroup@gmail.com, airpremier.ceo@airpremiergroup.com';
+    const toEmailRaw = process.env.CONTACT_RECEIVER_EMAIL || 'contacto@airpremiergroup.com, airpremiergroup@gmail.com';
     const toEmails = toEmailRaw.split(',').map(e => e.trim()).filter(Boolean);
 
     // Remitente corporativo verificado en Resend
